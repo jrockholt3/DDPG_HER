@@ -92,7 +92,7 @@ def obj_get_coords(curr_pos, t, radius, workspace_limits, res,label):
 
 class rand_object():
     def __init__(self,object_radius=.03, dt=.01, res=0.01, max_obj_vel = .6, \
-                label=-1.0,workspace_limits=np.array([[-.6,.6],[-.6,.6],[0,.9]])):
+                label=1.0,workspace_limits=np.array([[-.6,.6],[-.6,.6],[0,.9]])):
         self.radius = object_radius
         self.res = res
         self.t = 0 # an interger defining the time step 
@@ -199,7 +199,7 @@ def cyl_get_coords(original, t, T, res, limits):
     return coord_list, feat_list
 
 class Cylinder():
-    def __init__(self, r=.02, L=.3, res=.01, label=1.0, workspace=np.array([[-.6,.6],[-.6,.6],[0,.9]])):
+    def __init__(self, r=.02, L=.3, res=.01, label=2, workspace=np.array([[-.6,.6],[-.6,.6],[0,.9]])):
         self.r = r 
         self.L = L
         self.res = res

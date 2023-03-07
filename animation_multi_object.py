@@ -2,7 +2,6 @@ import platform
 import matplotlib
 # matplotlib.use('nbAgg'
 # print(platform.system())
-from Networks import Actor
 from Agent import Agent
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,14 +12,15 @@ import Robot_Env
 from Robot_Env import dt
 from Object_v2 import rand_object
 from Robot3D import workspace_limits as lims 
+from utils import stack_arrays
 # Fixing random state for reproducibility
 import torch
 show_box = False
 use_PID = False
 num_obj = 3
 evaluation = True
-actor_name = 'actor'
-critic_name = 'critic'
+actor_name = 'reduced_act'
+critic_name = 'reduced_crit'
 
 class Box():
     def __init__(self):
@@ -62,6 +62,7 @@ env = Robot_Env.RobotEnv(num_obj=num_obj)
 agent = Agent(env,actor_name=actor_name,critic_name=critic_name,e = .005,enoise=torch.tensor([.5,.1,.1]),noise=.005)
 agent.load_models()
 env, state = env.reset()
+print('start', env.start)
 # env.start = np.array([0, np.pi/4, -np.pi/4])
 # env.goal = np.array([-3*np.pi/4, np.pi/12, -np.pi/6])
 goal = env.goal
@@ -90,31 +91,17 @@ x_arr2,y_arr2,z_arr2 = [],[],[]
 # y_arr2.append(temp[1])
 # z_arr2.append(temp[2])
 
-coord_list = []
-feat_list = []
-c_arr = state[0]
-for j in range(6):
-    c_arr[:,0] = j
-    coord_list.append(c_arr.copy())
-    feat_list.append(state[1])
+coord_list = [state[0]]
+feat_list = [state[1]]
 
 done = False
 score = 0
 while not done:
-    state_ = (np.vstack(coord_list), np.vstack(feat_list), state[2])
+    state_ = (np.vstack(coord_list), np.vstack(feat_list), state[2], state[3])
     action = agent.choose_action(state_,evaluate=evaluation)
     state, reward, done, info = env.step(action, use_PID=use_PID)
     score += reward
-    coord_list.insert(0,state[0])
-    feat_list.insert(0,state[1])
-    coord_list.pop()
-    feat_list.pop()
-    new_list = []
-    for j,c in enumerate(coord_list):
-        c[:,0] = j
-        new_list.append(c.copy())
-        coord_list = new_list.copy()
-    del new_list
+    coord_list, feat_list = stack_arrays(coord_list, feat_list, state)
 
 
     temp = env.robot.forward()

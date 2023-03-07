@@ -3,32 +3,36 @@ import MinkowskiEngine as ME
 import numpy as np
     
     
-def act_preprocessing(state,jnt_goal,single_value=False,device='cuda'):
+def act_preprocessing(state,single_value=False,device='cuda'):
     if single_value:
         coords,feats = ME.utils.sparse_collate([state[0]],[state[1]])
         jnt_pos = state[2]#.clone().detach()
         jnt_pos = torch.tensor(jnt_pos,dtype=torch.double,device=device).view(1,state[2].shape[0])
+        jnt_goal = state[3]
         jnt_goal = torch.tensor(jnt_goal,dtype=torch.double,device=device).view(1,jnt_goal.shape[0])
     else:
         coords,feats = ME.utils.sparse_collate(state[0],state[1])
         jnt_pos = state[2]#.clone().detach()
         jnt_pos = torch.tensor(jnt_pos,dtype=torch.double,device=device)
+        jnt_goal = state[3]
         jnt_goal = torch.tensor(jnt_goal,dtype=torch.double,device=device)
 
     x = ME.SparseTensor(coordinates=coords, features=feats.double(),device=device)
     return x, jnt_pos, jnt_goal
 
-def crit_preprocessing(state, jnt_goal, action, single_value=False, device='cuda'):
+def crit_preprocessing(state, action, single_value=False, device='cuda'):
     if single_value:
         coords,feats = ME.utils.sparse_collate([state[0]],[state[1]])
         jnt_pos = state[2]#.clone().detach()
         jnt_pos = torch.tensor(jnt_pos,dtype=torch.double,device=device).view(1,state[2].shape[0])
+        jnt_goal = state[3]
         jnt_goal = torch.tensor(jnt_goal,dtype=torch.double,device=device).view(1,jnt_goal.shape[0])
         a = torch.tensor(action,dtype=torch.double,device=device).view(1,action.shape[0])
     else:
         coords,feats = ME.utils.sparse_collate(state[0],state[1])
         jnt_pos = state[2]#.clone().detach()
         jnt_pos = torch.tensor(jnt_pos,dtype=torch.double,device=device)
+        jnt_goal = state[3]
         jnt_goal = torch.tensor(jnt_goal,dtype=torch.double,device=device)
         a = torch.tensor(action,dtype=torch.double,device=device)
 

@@ -16,7 +16,6 @@ Alpha = .8
 Beta = 0 # positive reward for proximity
 Gamma = 0 # negative rewards for be jumps in torque (minimize jerk)
 prox_thres = .05 # proximity threshold - 5 cm
-goal = np.array([np.pi/2, np.pi/2, np.pi/2])
 min_prox = 0.1
 vel_prox = 0.4
 
@@ -158,7 +157,7 @@ class observation_space():
 
 class RobotEnv():
     # have to generate random poses
-    def __init__(self, eval=False, has_objects=True, close_by=False, ds = .1, num_obj=2):
+    def __init__(self, eval=False, has_objects=True, close_by=False, ds = .1, num_obj=3):
         self.robot = Robot.robot_3link()
 
         if has_objects:
@@ -190,38 +189,59 @@ class RobotEnv():
                 quad2 = rng.choice(np.array([1,2,3,4]))
             g = gen_rand_pos(quad2)
 
-        # get a joint position that doesn't have a collison
-        rand_int = rng.choice([0,1])
-        th_arr = self.robot.reverse(goal=g)
-        self.goal = angle_calc(th_arr[:,rand_int])
-        self.robot.set_pose(self.goal)
-        if self.robot.check_safety():
-            rand_int = (rand_int+1)%2
-            self.goal = angle_calc(th_arr[:,rand_int])
-        # get a joint position that doesn't have a collison
-        rand_int = (rand_int+1)%2
-        th_arr = self.robot.reverse(goal=s)
-        self.start = th_arr[:,rand_int]
+        # # get a joint position that doesn't have a collison
+        # rand_int = rng.choice([0,1])
+        # th_arr = self.robot.reverse(goal=g)
+        # self.goal = angle_calc(th_arr[:,rand_int])
+        # self.robot.set_pose(self.goal)
+        # if self.robot.check_safety():
+        #     rand_int = (rand_int+1)%2
+        #     self.goal = angle_calc(th_arr[:,rand_int])
+        # # get a joint position that doesn't have a collison
+        # rand_int = rng.choice([0,1])
+        # th_arr = self.robot.reverse(goal=s)
+        # self.start = th_arr[:,rand_int]
+        # self.robot.set_pose(self.start)
+        # if self.robot.check_safety():
+        #     rand_int = (rand_int+1)%2
+        #     self.start = th_arr[:,rand_int]
+        #     self.robot.set_pose(self.start)
+
+        self.start = np.array([np.pi/4, np.pi/4, np.pi/4])
         self.robot.set_pose(self.start)
-        if self.robot.check_safety():
-            rand_int = (rand_int+1)%2
-            self.start = th_arr[:,rand_int]
-            self.robot.set_pose(self.start)
+        self.goal = np.array([-np.pi/4, -np.pi/4, -np.pi/4])
 
         self.done = False
         self.jerk_sum = 0
         self.t_sum = 0
         self.t_count = 0
-        # self.jnt_err_sum = 0
         self.info = {}
         self.jnt_err = calc_jnt_err(self.robot.pos, self.goal) 
         self.jnt_err_vel = np.array([0,0,0])
         self.prev_tau = np.array([0,0,0])
 
+    def reward_replay(self, jnt_pos, new_jnt_pos, goal):
+        jnt_err = calc_jnt_err(jnt_pos,goal)
+        new_jnt_err = calc_jnt_err(new_jnt_pos,goal)
+        jnt_err_vel = (new_jnt_err - jnt_err)/dt
+
+        self.robot.set_pose(new_jnt_pos)
+        violation = self.robot.check_safety()
+        
+        bonus = 0
+        safety_bonus = 0
+        done = False
+        if np.all(abs(jnt_err) < thres):
+            done = True
+            bonus = 2*np.exp(-np.dot(new_jnt_err, new_jnt_err) - np.dot(jnt_err_vel, jnt_err_vel))
+            
+        reward = scale*(-1) + bonus + safety_bonus
+
+        return reward, done
 
     # need to return the relative positions of the object and the relative vels
     # in terms of the end effector frame of reference.
-    def step(self, action, use_PID=False):
+    def step(self, action, use_PID=False, eval=False):
         self.t_count += 1
         # stopping the robot is object is too close
         paused = False
@@ -265,13 +285,10 @@ class RobotEnv():
 
             jnt_err = calc_jnt_err(self.robot.pos, self.goal) 
             self.jnt_err_vel = (self.jnt_err - jnt_err)/dt
-            self.jnt_err = jnt_err # joint error for stateself.n_actions
-            # self.jnt_err_sum += np.linalg.norm(self.jnt_err*dt)
+            self.jnt_err = jnt_err 
         else:
             self.robot.set_jnt_vel(np.array([0,0,0]))
-            # jnt_err = self.goal - self.robot.pos # calc_jnt_err(self.robot.pos, self.goal) 
             self.jnt_err_vel = np.array([0,0,0])
-            # self.jnt_err = jnt_err
 
         # update objects
         for o in self.objs:
@@ -282,28 +299,26 @@ class RobotEnv():
         self.t_sum += dt
         if self.t_sum > t_limit:
             done = True
-        elif np.all(abs(self.jnt_err) < thres) and np.all(abs(self.jnt_err_vel) < vel_thres): 
+            # bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err))
+        elif np.all(abs(self.jnt_err) < thres): #and np.all(abs(self.jnt_err_vel) < vel_thres): 
             done = True 
-            bonus = 10
+            bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err)-np.dot(self.jnt_err_vel, self.jnt_err_vel))
             print('finished by converging!!')
         else:
             done = False
 
         safety_bonus = 0
-        if safety_violation or paused:
-            safety_bonus = 1
+        # if safety_violation:
+        #     safety_bonus = 10
+        #     done = True
 
         # reward = -Alpha * np.sum(np.abs(self.jnt_err)) + bonus 
-        reward = scale*( -(Alpha)*np.linalg.norm(self.jnt_err)**2 
-                         -(1-Alpha)*np.linalg.norm(self.jnt_err)  
-                         - 1  
-                         - safety_bonus 
-                         + bonus )
+        reward = scale*(-1) - safety_bonus + bonus 
 
         # collecting point cloud data and creating state
         coords = []
         feats = []
-        if not self.eval: # skip over computation when making an animation
+        if not eval: # skip over computation when making an animation
             rob_coords, rob_feats = self.robot.get_coords(self.t_count)
             for obj in self.objs:
                 c,f = obj.get_coords(self.t_count)
@@ -313,7 +328,7 @@ class RobotEnv():
             feats.append(rob_feats)
             coords = np.vstack(coords)
             feats = np.vstack(feats)
-        state = (coords,feats,self.robot.pos)
+        state = (coords,feats,self.robot.pos,self.goal)
         if use_PID:
             self.info = {'tau': tau}
         return state, reward, done, self.info
@@ -334,14 +349,6 @@ class RobotEnv():
         coords = np.vstack(coords)
         feats = np.vstack(feats)
 
-        state = (coords,feats,self.robot.pos)
+        state = (coords,feats,self.robot.pos,self.goal)
         return new_env, state
-
-
-    
-
-
-        
-
-
 

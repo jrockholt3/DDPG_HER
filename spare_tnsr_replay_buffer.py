@@ -13,6 +13,8 @@ import pickle
 #             pass
 #     return q 
 
+rng = np.random.default_rng()
+
 class ReplayBuffer:
     def __init__(self, max_size, jnt_d, time_d, file='replay_buffer_no_obj',dir='buffer'):
         # jnt_d = joint dimensions
@@ -29,7 +31,6 @@ class ReplayBuffer:
         self.new_coord_memory = np.empty(max_size,dtype=np.object)
         self.new_feat_memory = np.empty(max_size,dtype=np.object)
         self.new_jnt_pos_memory = np.zeros((self.mem_size, jnt_d),dtype=np.float32)
-        self.new_jnt_goal_memory = np.zeros((self.mem_size, jnt_d),dtype=np.float32)
         self.action_memory = np.zeros((self.mem_size, jnt_d),dtype=np.float32)
         self.reward_memory = np.zeros(self.mem_size)
         self.terminal_memory = np.zeros(self.mem_size, dtype=bool)
@@ -43,33 +44,33 @@ class ReplayBuffer:
 
     def store_transition(self, state, action, reward, new_state, done, time_step):
 
-        # state is (coord_list, feat_list, jnt_err, time_step)
+        # state is (coord_list, feat_list, jnt_pos, jnt_goal)
         ndx = self.mem_cntr % self.mem_size
-        # q1 = check_memory()
-        self.coord_memory[ndx] = state[0] #.clone().detach().cpu()
+        self.coord_memory[ndx] = state[0] 
         self.feat_memory[ndx] = state[1]
         self.jnt_pos_memory[ndx] = state[2]
         self.jnt_goal_memory[ndx] = state[3]
-        self.time_step[ndx] = time_step
+        if isinstance(action, np.ndarray):
+            self.action_memory[ndx] = action
+        else:
+            self.action_memory[ndx] = action.detach().cpu().numpy()
+        self.reward_memory[ndx] = reward
         self.new_coord_memory[ndx] = new_state[0]
         self.new_feat_memory[ndx] = new_state[1]
         self.new_jnt_pos_memory[ndx] = new_state[2]
-        self.new_jnt_goal_memory[ndx] = new_state[3]
         self.terminal_memory[ndx] = done
-        self.action_memory[ndx] = action.detach().cpu().numpy()
-        self.reward_memory[ndx] = reward
+        self.time_step[ndx] = time_step
         self.mem_cntr += 1
-        # q2 = check_memory()
-
-        # print('operation added',q2-q1,'tensors')
 
 
-    def sample_buffer(self, batch_size, everything=False):
+    def sample_buffer(self, batch_size, batch=None, everything=False, use_batch=False):
         min_mem = min(self.mem_cntr, self.mem_size)
-        if not everything:
-            batch = np.random.choice(min_mem, batch_size, replace=False)
-        else:
+        if everything:
             batch = np.arange(min_mem,dtype=np.int32)
+        elif use_batch:
+            batch = batch
+        else:
+            batch = rng.choice(min_mem, batch_size,replace=False)
         
         coord_batch = []
         feat_batch = []
@@ -79,8 +80,6 @@ class ReplayBuffer:
         new_coord_list = []
         feat_list = []
         new_feat_list = []
-        jnt_err_batch = []
-        new_jnt_err_batch = []
         for b in batch:
             for t in range(self.time_d):
                 ndx_i = (b - t) % self.mem_size
@@ -99,8 +98,6 @@ class ReplayBuffer:
                 else:
                     t = self.time_d + 1
             
-            jnt_pos_batch.append(self.jnt_pos_memory[b])
-            new_pos_err_batch.append(self.new_jnt_pos_memory[b])
             coord_batch.append(np.vstack(coord_list))
             feat_batch.append(np.vstack(feat_list))
             new_coord_batch.append(np.vstack(new_coord_list))
@@ -110,14 +107,15 @@ class ReplayBuffer:
             new_coord_list = []
             new_feat_list = []
 
-        jnt_err = np.vstack(jnt_err_batch)
-        new_jnt_err = np.vstack(new_jnt_err_batch)
+        jnt_pos = self.jnt_pos_memory[batch]
+        new_jnt_pos = self.new_jnt_pos_memory[batch]
+        jnt_goal = self.jnt_goal_memory[batch]
         actions = self.action_memory[batch]
         rewards = self.reward_memory[batch]
         dones = self.terminal_memory[batch]
 
-        return (coord_batch, feat_batch, jnt_err), actions, \
-                rewards, (new_coord_batch, new_feat_batch, new_jnt_err), dones
+        return (coord_batch, feat_batch, jnt_pos, jnt_goal), actions, \
+                rewards, (new_coord_batch, new_feat_batch, new_jnt_pos, jnt_goal), dones
         
     def save(self):
         print('saving buffer')
@@ -151,18 +149,19 @@ class ReplayBuffer:
         jnt_d = self.jnt_d
         self.coord_memory = np.empty(max_size,dtype=np.object)
         self.feat_memory = np.empty(max_size,dtype=np.object)
-        self.jnt_pos_memory = np.empty(self.mem_size,dtype=np.object)
-
+        self.jnt_pos_memory = np.zeros((self.mem_size,jnt_d))
+        self.jnt_goal_memory = np.zeros((self.mem_size,jnt_d))
         self.new_coord_memory = np.empty(max_size,dtype=np.object)
         self.new_feat_memory = np.empty(max_size,dtype=np.object)
-        self.new_jnt_pos_memory = np.empty(self.mem_size,dtype=np.object)
+        self.new_jnt_pos_memory = np.zeros((self.mem_size,jnt_d))
 
         self.action_memory = np.zeros((self.mem_size, jnt_d))
         self.reward_memory = np.zeros(self.mem_size)
         self.terminal_memory = np.zeros(self.mem_size, dtype=bool)
+        self.time_step = np.ones(self.mem_size) * np.inf
+        self.mem_cntr = 0
 
-    def add_batch_data(self, mems):
-        
+    def add_data(self, mems):
         for mem in mems:
             for i in range(mem.mem_cntr):
                 ndx = self.mem_cntr % self.mem_size
@@ -170,10 +169,9 @@ class ReplayBuffer:
                 self.feat_memory[ndx] = mem.feat_memory[i]
                 self.jnt_pos_memory[ndx] = mem.jnt_pos_memory[i]
                 self.jnt_goal_memory[ndx] = mem.jnt_goal_memory[i]
-                self.action_memory = mem.action_memory[i]
+                self.action_memory[ndx] = mem.action_memory[i]
                 self.new_coord_memory[ndx] = mem.new_coord_memory[i]
                 self.new_feat_memory[ndx] = mem.new_feat_memory[i]
-                self.new_jnt_goal_memory[ndx] = mem.new_jnt_goal_memory[i]
                 self.new_jnt_pos_memory[ndx] = mem.new_jnt_pos_memory[i]
                 self.time_step[ndx] = mem.time_step[i]
                 self.reward_memory[ndx] = mem.reward_memory[i]
