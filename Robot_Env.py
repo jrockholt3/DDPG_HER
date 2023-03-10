@@ -17,7 +17,7 @@ Beta = 0 # positive reward for proximity
 Gamma = 0 # negative rewards for be jumps in torque (minimize jerk)
 prox_thres = .05 # proximity threshold - 5 cm
 min_prox = 0.1
-vel_prox = 0.4
+vel_prox = 0.5
 
 # Controller gains
 tau_max = 30 #J*rad/s^2, J = 1
@@ -207,7 +207,9 @@ class RobotEnv():
         #     self.start = th_arr[:,rand_int]
         #     self.robot.set_pose(self.start)
 
-        self.start = np.array([np.pi/4, np.pi/4, np.pi/4])
+        goal = np.array([-.3,-.3,.2])
+        th = self.robot.reverse(goal=goal)
+        self.start = th[:,1]
         self.robot.set_pose(self.start)
         self.goal = np.array([-np.pi/4, -np.pi/4, -np.pi/4])
 
@@ -303,7 +305,7 @@ class RobotEnv():
         elif np.all(abs(self.jnt_err) < thres): #and np.all(abs(self.jnt_err_vel) < vel_thres): 
             done = True 
             bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err)-np.dot(self.jnt_err_vel, self.jnt_err_vel))
-            print('finished by converging!!')
+            # print('finished by converging!!')
         else:
             done = False
 

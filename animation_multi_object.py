@@ -17,10 +17,10 @@ from utils import stack_arrays
 import torch
 show_box = False
 use_PID = False
-num_obj = 3
+num_obj = 2
 evaluation = True
-actor_name = 'reduced_act'
-critic_name = 'reduced_crit'
+actor_name = 'actor_0308'
+critic_name = 'critic_0308'
 
 class Box():
     def __init__(self):
@@ -62,6 +62,10 @@ env = Robot_Env.RobotEnv(num_obj=num_obj)
 agent = Agent(env,actor_name=actor_name,critic_name=critic_name,e = .005,enoise=torch.tensor([.5,.1,.1]),noise=.005)
 agent.load_models()
 env, state = env.reset()
+# start = np.array([np.pi/4, np.pi/4, np.pi/4])
+# goal = -1*start
+# env.goal=goal
+# env.robot.set_pose(start)
 print('start', env.start)
 # env.start = np.array([0, np.pi/4, -np.pi/4])
 # env.goal = np.array([-3*np.pi/4, np.pi/12, -np.pi/6])

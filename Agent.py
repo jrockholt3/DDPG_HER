@@ -5,8 +5,8 @@ from torch.optim import NAdam
 import numpy as np
 import MinkowskiEngine as ME
 from spare_tnsr_replay_buffer import ReplayBuffer
-# from PPO_Networks import Actor as Actor
-from Reduced_Networks import Actor, Critic
+from PPO_Networks import Actor as Actor, Critic
+# from Reduced_Networks import Actor, Critic
 import pickle
 import gc 
 from Robot_Env import tau_max,scale 

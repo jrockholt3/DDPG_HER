@@ -101,10 +101,10 @@ class rand_object():
 
         # init the object's location at a random (x,y) within the workspace
         self.workspace_limits = workspace_limits
-        rho = rng.uniform(.5,1.0) * self.workspace_limits[0,1]        
-        phi = 2*np.pi*rng.random()
+        rho = rng.uniform(.3,.7) * self.workspace_limits[0,1]        
+        phi = np.pi/2*rng.random() + 3*np.pi/2
         temp = np.array([-1.0, 1.0])
-        phi2 = rng.choice(temp) * np.pi/2 * rng.uniform(0.5, 1.0)
+        phi2 = rng.choice(temp) * np.pi/4 * rng.uniform(0.5, 1.0)
         # setti
         z_max = 0.8*workspace_limits[2,1]
         z_min = 0.1*workspace_limits[2,1]

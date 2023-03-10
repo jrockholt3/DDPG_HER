@@ -5,14 +5,14 @@ from spare_tnsr_replay_buffer import ReplayBuffer
 import numpy as np
 from time import time
 from pathos.threading import ThreadPool
-# from PPO_Networks import Actor
-from Reduced_Networks import Actor
+from PPO_Networks import Actor
+# from Reduced_Networks import Actor
 from utils import act_preprocessing, stack_arrays
 from torch.distributions import MultivariateNormal
 from Robot_Env import tau_max, t_limit, dt
 
 class ParallelRobotEnv():
-    def __init__(self, actor_state_dict, noise=.01*tau_max):
+    def __init__(self, actor_state_dict, noise=.01*tau_max, use_PID=False):
         # super(ParallelRobotEnv,self).__init__()
         env = RobotEnv(num_obj=5)
         mem_size = int(np.round(2*t_limit/dt))
@@ -23,14 +23,18 @@ class ParallelRobotEnv():
         self.actor = Actor(in_feat=1, jnt_dim=3,D=4,name='actor',device='cpu')
         self.actor.load_state_dict(actor_state_dict)
         self.noise = noise
+        self.use_PID = use_PID
         
     def step(self, action, use_PID=False):
         return self.env.step(action, use_PID=use_PID)
     
     def choose_action(self, x, jnt_pos, jnt_goal):
-        with torch.no_grad():
-            action = self.actor.forward(x, jnt_pos, jnt_goal)
-        action += torch.normal(torch.zeros_like(action),self.noise)
+        if not self.use_PID:
+            with torch.no_grad():
+                action = self.actor.forward(x, jnt_pos, jnt_goal)
+            action += torch.normal(torch.zeros_like(action),self.noise)
+        else: 
+            action = torch.zeros(3, device='cuda')
         return action
 
     def reset(self):
@@ -53,7 +57,7 @@ def run_episode(env: ParallelRobotEnv):
         x, jnt_pos, jnt_goal = act_preprocessing(state_,single_value=True,device=env.actor.device)
         with torch.no_grad():
             action = env.choose_action(x, jnt_pos, jnt_goal)
-        new_state, reward, done, info = env.step(action)
+        new_state, reward, done, info = env.step(action, use_PID=env.use_PID)
         env.memory.store_transition(state, action, reward, new_state, done,t)
         state = new_state
         coord_list, feat_list = stack_arrays(coord_list, feat_list, state)

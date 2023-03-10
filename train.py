@@ -9,24 +9,24 @@ from pathos.threading import ThreadPool
 from Parallel_Robot_Env import ParallelRobotEnv, run_episode
 
 
-score_hist_file = 'score_hist_0302'
-loss_hist_file = 'loss_hist_0302'
-act_name = 'reduced_act'
-crit_name = 'reduced_crit'
+score_hist_file = 'score_hist_0308'
+loss_hist_file = 'loss_hist_0308'
+act_name = 'actor_0308'
+crit_name = 'critic_0308'
 alpha = .001 # actor lr
 beta = .002 # critic lr
-gamma = .7
+gamma = .99
 top_only = False
 transfer = False
 load_check_ptn = False
 load_memory = False
 has_objs = True
-num_obj = 3
+num_obj = 2
 top_only = False
 epochs = 5 # number of epochs to train over the collected data per episode
 num_workers = 10
 episodes = 2000
-best_score = -np.inf
+best_score = -.19
 n = 30 # number of episodes to calculate the average score
 batch_size = 512 # batch size
 
@@ -39,12 +39,10 @@ rng = np.random.default_rng()
 
 if load_check_ptn:
     agent.load_models()
-    # file = open('tmp/' + score_hist_file, 'rb')
-    # loss_hist = pickle.load(file)
-    # file = open('tmp/' + loss_hist_file, 'rb')
-    # score_history = pickle.load( file)
-    score_history = []
-    loss_hist = []
+    file = open('tmp/' + score_hist_file + '.pkl', 'rb')
+    loss_hist = pickle.load(file)
+    file = open('tmp/' + loss_hist_file + '.pkl', 'rb')
+    score_history = pickle.load( file)
 else:
     score_history = []
     loss_hist = []
@@ -56,7 +54,8 @@ saved_checkpoint = False
 
 for i in range(episodes):
     t1 = time()
-    workers = [ParallelRobotEnv(agent.actor.state_dict(),agent.noise) for i in range(num_workers)]
+    workers = [ParallelRobotEnv(agent.actor.state_dict(),agent.noise) for i in range(num_workers-1)]
+    workers.append(ParallelRobotEnv(agent.actor.state_dict(),agent.noise,use_PID=True))
     pool = ThreadPool()
     output = pool.map(run_episode,workers)
     mems,goal_mems,score=[],[],[]
@@ -89,12 +88,13 @@ for i in range(episodes):
     loss_hist.append(loss/(epochs*n_batch))
 
     if np.mean(score_history[-n:]) > best_score and i > n:
+    # if i%10 == 0:
         saved_checkpoint = True
         agent.save_models()
         best_score = np.mean(score_history[-n:])
-        file = open('tmp/' + score_hist_file+'.pkl', 'wb')
+        file = open('tmp/' + score_hist_file + '.pkl', 'wb')
         pickle.dump(loss_hist,file)
-        file = open('tmp/' + loss_hist_file+'.pkl', 'wb')
+        file = open('tmp/' + loss_hist_file + '.pkl', 'wb')
         pickle.dump(score_history, file)
 
     t2 = time()
